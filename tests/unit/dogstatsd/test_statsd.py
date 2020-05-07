@@ -691,18 +691,37 @@ class TestDogStatsd(unittest.TestCase):
     def test_batched_buffer_autoflush(self):
         fake_socket = FakeSocket()
         bytes_sent = 0
-        with DogStatsd(telemetry_min_flush_interval=0) as statsd:
+        with DogStatsd(telemetry_min_flush_interval=0, max_buffer_size=50) as statsd:
             statsd.socket = fake_socket
-            for i in range(51):
+            for i in range(60):
                 statsd.increment('mycounter')
             payload = '\n'.join(['mycounter:1|c' for i in range(50)])
 
-            telemetry = telemetry_metrics(metrics=50)
+            telemetry = telemetry_metrics(metrics=51)
             bytes_sent += len(payload)+len(telemetry)
 
             assert_equal_telemetry(payload, fake_socket.recv(), telemetry=telemetry)
+        payload = '\n'.join(['mycounter:1|c' for i in range(10)])
+        assert_equal_telemetry(payload, fake_socket.recv(), telemetry=telemetry_metrics(metrics=9, packets_sent=1, bytes_sent=bytes_sent))
 
-        assert_equal_telemetry('mycounter:1|c', fake_socket.recv(), telemetry=telemetry_metrics(packets_sent=1, bytes_sent=bytes_sent))
+    def test_batched_buffer_autoflush_packet_size(self):
+        fake_socket = FakeSocket()
+        bytes_sent = 0
+        with DogStatsd(telemetry_min_flush_interval=0) as statsd:
+            single_metric = 'mycounter:1|c'
+            statsd._max_payload_size = 2048
+            metrics_per_packet = statsd._max_payload_size // (len(single_metric) + 1)
+            statsd.socket = fake_socket
+            for i in range(metrics_per_packet + 1):
+                statsd.increment('mycounter')
+            payload = '\n'.join(['mycounter:1|c' for i in range(metrics_per_packet)])
+
+            telemetry = telemetry_metrics(metrics=metrics_per_packet+1)[1:]
+            bytes_sent += len(payload) + len(telemetry)
+            assert_equal(payload, fake_socket.recv())
+            assert_equal(telemetry, fake_socket.recv())
+        assert_equal_telemetry('mycounter:1|c', fake_socket.recv(), telemetry=telemetry_metrics(metrics=0, packets_sent=2, bytes_sent=bytes_sent))
+
 
     def test_module_level_instance(self):
         assert isinstance(statsd, DogStatsd)
