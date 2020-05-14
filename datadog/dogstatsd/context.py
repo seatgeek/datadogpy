@@ -72,7 +72,7 @@ class TimedContextManagerDecorator(object):
         elapsed = time() - start
         use_ms = self.use_ms if self.use_ms is not None else self.statsd.use_ms
         elapsed = int(round(1000 * elapsed)) if use_ms else elapsed
-        self.statsd.timing(self.metric, elapsed, self.tags, self.sample_rate)
+        self.statsd.timer_metric_function(self.metric, elapsed, self.tags, self.sample_rate)
         self.elapsed = elapsed
 
     def start(self):

@@ -50,7 +50,7 @@ class DogStatsd(object):
     def __init__(self, host=DEFAULT_HOST, port=DEFAULT_PORT, max_buffer_size=50, namespace=None,
                  constant_tags=None, use_ms=False, use_default_route=False,
                  socket_path=None, default_sample_rate=1, disable_telemetry=False,
-                 telemetry_min_flush_interval=DEFAULT_TELEMETRY_MIN_FLUSH_INTERVAL):
+                 telemetry_min_flush_interval=DEFAULT_TELEMETRY_MIN_FLUSH_INTERVAL, timer_metric="timing"):
         """
         Initialize a DogStatsd object.
 
@@ -161,6 +161,7 @@ class DogStatsd(object):
         self.namespace = namespace
         self.use_ms = use_ms
         self.default_sample_rate = default_sample_rate
+        self.timer_metric_function = self._choose_timer_metric_function(timer_metric)
 
         # init telemetry version
         try:
@@ -352,6 +353,22 @@ class DogStatsd(object):
             except OSError as e:
                 log.error("Unexpected error: %s", str(e))
             self.socket = None
+
+    def _choose_timer_metric_function(self, timer_metric_name):
+        timer_metric_function_by_name = {
+            "timing": self.timing,
+            "distribution": self.distribution,
+            "histogram": self.histogram
+        }
+        try:
+            return timer_metric_function_by_name[timer_metric_name]
+        except KeyError:
+            log.warn(
+                "provided timer metric %s is not in allowed timer metrics %s, using default metric 'timing'",
+                timer_metric_name,
+                list(timer_metric_function_by_name.keys())
+            )
+            return self.timing
 
     def _serialize_metric(self, metric, metric_type, value, tags, sample_rate=1):
         # Create/format the metric packet
